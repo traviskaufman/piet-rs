@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use image::RgbImage;
 
-use state::Position;
+use state::{Position, Direction};
 use util;
 
 // See: https://en.wikipedia.org/wiki/Flood_fill
@@ -30,27 +30,41 @@ fn flood_check(img: &RgbImage,
 
     seen_positions.insert((x, y));
 
-    match pos {
-        Position { left, top } if left <= blk.top_left_codel.left &&
-                                  top <= blk.top_left_codel.top => {
-            blk.top_left_codel = pos;
-        }
-        Position { left, top } if left >= blk.top_right_codel.left &&
-                                  top <= blk.top_right_codel.top => {
-            blk.top_right_codel = pos;
-        }
-        Position { left, top } if left <= blk.bottom_left_codel.left &&
-                                  top >= blk.bottom_left_codel.top => {
-            blk.bottom_left_codel = pos;
-        }
-        Position { left, top } if left >= blk.bottom_right_codel.left &&
-                                  top >= blk.bottom_right_codel.top => {
-            blk.bottom_right_codel = pos;
-        }
-        _ => (),
+    blk.num_codels += 1;
+
+    // TODO: Change
+    // What we need, the *topmost*, *bottommost*, *leftmost*, and *rightmost* edges of the color
+    // block. That is:
+    // - topmost_edge: The min `top` value of any codel in the block
+    // - bottommost_edge: The max `top` value of any codel in the block
+    // - leftmost_edge: The min `left` value of any codel in the block
+    // - rightmost_edge: The max `left` value of any codel in the block
+    //
+    // Given those, we can scan that dimension and determine the following:
+    // - DP=UP && CC=LEFT => Scan along topmost edge and find the min `left`
+    // - DP=DOWN && CC=LEFT => Scan along bottommost edge and find the max `left` codel
+    // - DP=LEFT && CC=LEFT => Scan along leftmost edge and find max `top` codel
+    // - DP=RIGHT && CC=LEFT => Scan along rightmost edge and find min `top` codel
+    // - DP=UP && CC=RIGHT => Scan along topmost edge to find max `left` codel
+    // - DP=DOWN && CC=RIGHT => Scan along bottommost edge and find min `left` codel
+    // - DP=LEFT && CC=RIGHT => Scan along leftmost edge and find min `top` codel
+    // - DP=RIGHT && CC=RIGHT => Scan along rightmost edge and find max `top` codel
+    // - NOTE: Save coords in a HashSet so that you can check membership of color block when traversing
+
+    // NOTE: we do left/top equality checks below so that we know that the dp can travel to it
+    if pos.left < blk.furthest_left_codel.left && pos.top == blk.furthest_left_codel.top {
+        blk.furthest_left_codel = pos;
+    } else if pos.left > blk.furthest_right_codel.left && pos.top == blk.furthest_right_codel.top {
+        blk.furthest_right_codel = pos;
     }
 
-    // TODO: Use vecdeque-based method for perf
+    if pos.top < blk.furthest_up_codel.top && pos.left == blk.furthest_up_codel.left {
+        blk.furthest_up_codel = pos;
+    } else if pos.top > blk.furthest_down_codel.top && pos.left == blk.furthest_down_codel.left {
+        blk.furthest_down_codel = pos;
+    }
+
+    // TODO(perf): Use vecdeque-based method
     // South
     flood_check(&img, x, y + 1, &mut blk, &mut seen_positions);
     // North
@@ -63,21 +77,21 @@ fn flood_check(img: &RgbImage,
 
 #[derive(Debug)]
 pub struct ColorBlock {
-    top_left_codel: Position,
-    top_right_codel: Position,
-    bottom_left_codel: Position,
-    bottom_right_codel: Position,
-    color: (u8, u8, u8),
-    num_codels: u32,
+    pub furthest_left_codel: Position,
+    pub furthest_right_codel: Position,
+    pub furthest_up_codel: Position,
+    pub furthest_down_codel: Position,
+    pub color: (u8, u8, u8),
+    pub num_codels: u32,
 }
 
 impl ColorBlock {
     pub fn from_position_in_img(img: &RgbImage, pos: &Position) -> ColorBlock {
         let mut blk = ColorBlock {
-            top_left_codel: Position { left: 0, top: 0 },
-            top_right_codel: Position { left: 0, top: 0 },
-            bottom_left_codel: Position { left: 0, top: 0 },
-            bottom_right_codel: Position { left: 0, top: 0 },
+            furthest_left_codel: *pos,
+            furthest_right_codel: *pos,
+            furthest_up_codel: *pos,
+            furthest_down_codel: *pos,
             color: (0, 0, 0),
             num_codels: 0,
         };
@@ -91,5 +105,14 @@ impl ColorBlock {
                     &mut blk,
                     &mut HashSet::new());
         blk
+    }
+
+    pub fn boundary_codel_for_direction(&self, dir: &Direction) -> Position {
+        match *dir {
+            Direction::Right => self.furthest_right_codel,
+            Direction::Down => self.furthest_down_codel,
+            Direction::Left => self.furthest_left_codel,
+            Direction::Up => self.furthest_up_codel,
+        }
     }
 }

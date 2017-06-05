@@ -78,10 +78,10 @@ pub struct State {
 impl State {
     pub fn new() -> State {
         State {
+            pos: Position { left: 0, top: 0 },
             dp: Direction::Right,
             cc: Direction::Left,
             stack: vec![],
-            pos: Position { left: 0, top: 0 },
             choosing_codel: false,
         }
     }
@@ -96,10 +96,6 @@ impl State {
 
     pub fn codel_direction(&self) -> Direction {
         self.cc + self.dp
-    }
-
-    pub fn pos(&self) -> Position {
-        self.pos
     }
 
     pub fn peek_pos(&self) -> Position {
@@ -127,18 +123,14 @@ impl State {
     }
 
     pub fn advance(&mut self) {
-        let pos = self.pos;
         self.pos = self.peek_pos();
-        println!("Advance from {} to {}", pos, self.pos);
     }
 
     pub fn rot_clockwise(&mut self) {
-        println!("Rotate clockwise to {:?}", self.dp + Direction::Right);
         self.dp += Direction::Right;
     }
 
     pub fn rot_counterclockwise(&mut self) {
-        println!("Rotate counterclockwise to {:?}", self.dp + Direction::Left);
         self.dp += Direction::Left;
     }
 

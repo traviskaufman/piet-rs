@@ -9,21 +9,32 @@ pub mod state;
 pub mod color_block;
 pub mod util;
 
+use color_block::ColorBlock;
 use state::{State, Position, Direction};
 
-// TODO: Account for black, rename to hit_restriction
-fn out_of_bounds<I>(img: &I, pos: &Position) -> bool
-    where I: image::GenericImage
-{
-    pos.left >= img.width() || pos.top >= img.height()
+fn would_hit_restriction(img: &image::RgbImage, state: &State) -> bool {
+    if state.dp() == Direction::Left && state.pos.left == 0 ||
+       state.dp() == Direction::Up && state.pos.top == 0 {
+        return true;
+    }
+
+    let nextpos = state.peek_pos();
+    if nextpos.left == img.width() || nextpos.top == img.height() {
+        return true;
+    }
+    return util::get_px(&img, &nextpos) == (0, 0, 0);
 }
 
-fn exec_cmd(from_px: &(u8, u8, u8), to_px: &(u8, u8, u8), from_pos: &Position, to_pos: &Position) {
-    println!("exec_cmd: from {:?} @ {:?} --> {:?} @ {:?}",
-             from_px,
+fn exec_cmd(from_px: &(u8, u8, u8),
+            to_px: &(u8, u8, u8),
+            from_pos: &Position,
+            to_pos: &Position,
+            state: &State) {
+    println!("exec_cmd: {} --> {} (DP: {:?}, CC: {:?})",
              from_pos,
-             to_px,
-             to_pos);
+             to_pos,
+             state.dp(),
+             state.cc());
 }
 
 fn run_app() -> Result<(), String> {
@@ -38,74 +49,49 @@ fn run_app() -> Result<(), String> {
     // interpret code
     let mut state = State::new();
     loop {
-        // Find the edge of the current color block in the furthest direction from the DP
-        let px = util::get_px(&img, &state.pos);
+        // Travel in the direction of the dp
+        let blk = ColorBlock::from_position_in_img(&img, &state.pos);
+        state.pos = blk.boundary_codel_for_direction(&state.dp());
 
-        let mut nextpos = state.peek_pos();
-        if out_of_bounds(&img, &nextpos) {
-            let orig_dp = state.dp();
-            let orig_cc = state.cc();
-            loop {
+        // Travel in the direction of the cc until we hit a new color
+        // TODO: Find a way to move within a color block
+        let codel_blk = ColorBlock::from_position_in_img(&img, &state.pos);
+        state.pos = codel_blk.boundary_codel_for_direction(&state.codel_direction());
+
+        // Boundary / end of program checks
+        let orig_dp = state.dp();
+        let orig_cc = state.cc();
+        let mut toggle_cc = true;
+        let mut first_restriction_check = true;
+        while would_hit_restriction(&img, &state) {
+            let is_end_of_program = !first_restriction_check && state.dp() == orig_dp &&
+                                    state.cc() == orig_cc;
+            if is_end_of_program {
+                println!("END OF PROGRAM!");
+                return Ok(());
+            }
+
+            first_restriction_check = false;
+            if toggle_cc {
                 state.toggle_cc();
-                nextpos = state.peek_pos();
-                if !out_of_bounds(&img, &nextpos) {
-                    break;
-                }
-
+                toggle_cc = false;
+            } else {
                 state.rot_clockwise();
-                if !(state.dp() == Direction::Left && state.pos.left == 0 ||
-                     state.dp() == Direction::Up && state.pos.top == 0) {
-                    nextpos = state.peek_pos();
-                    if !out_of_bounds(&img, &nextpos) {
-                        break;
-                    }
-                }
-
-                if state.dp() == orig_dp && state.cc() == orig_cc {
-                    // End of Program
-                    return Ok(());
-                }
+                toggle_cc = true;
             }
+
+            let new_dp_pos = ColorBlock::from_position_in_img(&img, &state.pos)
+                .boundary_codel_for_direction(&state.dp());
+            state.pos = ColorBlock::from_position_in_img(&img, &new_dp_pos)
+                .boundary_codel_for_direction(&state.codel_direction());
+            println!("Hit restriction: new state: {:?}", state);
         }
 
-        let nextpx = util::get_px(&img, &nextpos);
-        if nextpx != px {
-            state.choosing_codel = true;
-            let mut chosen_codel = px;
-            loop {
-                match state.codel_direction() {
-                    Direction::Right => {
-                        if state.pos.left + 1 == img.width() {
-                            break;
-                        }
-                    }
-                    Direction::Down => {
-                        if state.pos.top + 1 == img.height() {
-                            break;
-                        }
-                    }
-                    Direction::Left => {
-                        if state.pos.left == 0 {
-                            break;
-                        }
-                    }
-                    Direction::Up => {
-                        if state.pos.top == 0 {
-                            break;
-                        }
-                    }
-                }
-                state.advance();
-                chosen_codel = util::get_px(&img, &state.pos);
-            }
-            state.choosing_codel = false;
-
-            let new_block_pos = state.peek_pos();
-            let new_block_px = util::get_px(&img, &new_block_pos);
-            exec_cmd(&chosen_codel, &new_block_px, &state.pos, &new_block_pos);
-        }
-
+        // Advance to next color block and exec color cmd
+        let last_pos = state.pos;
         state.advance();
+        let nextcolor = util::get_px(&img, &state.pos);
+        exec_cmd(&blk.color, &nextcolor, &last_pos, &state.pos, &state);
     }
 }
 
