@@ -49,14 +49,8 @@ fn run_app() -> Result<(), String> {
     // interpret code
     let mut state = State::new();
     loop {
-        // Travel in the direction of the dp
         let blk = ColorBlock::from_position_in_img(&img, &state.pos);
-        state.pos = blk.boundary_codel_for_direction(&state.dp());
-
-        // Travel in the direction of the cc until we hit a new color
-        // TODO: Find a way to move within a color block
-        let codel_blk = ColorBlock::from_position_in_img(&img, &state.pos);
-        state.pos = codel_blk.boundary_codel_for_direction(&state.codel_direction());
+        state.pos = blk.boundary_codel_position(&state.dp(), &state.cc());
 
         // Boundary / end of program checks
         let orig_dp = state.dp();
@@ -80,10 +74,8 @@ fn run_app() -> Result<(), String> {
                 toggle_cc = true;
             }
 
-            let new_dp_pos = ColorBlock::from_position_in_img(&img, &state.pos)
-                .boundary_codel_for_direction(&state.dp());
-            state.pos = ColorBlock::from_position_in_img(&img, &new_dp_pos)
-                .boundary_codel_for_direction(&state.codel_direction());
+            state.pos = ColorBlock::from_position_in_img(&img, &state.pos)
+                .boundary_codel_position(&state.dp(), &state.cc());
             println!("Hit restriction: new state: {:?}", state);
         }
 

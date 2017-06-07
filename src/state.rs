@@ -3,7 +3,7 @@
 use std::fmt;
 use std::ops::{Add, AddAssign};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Position {
     pub left: u32,
     pub top: u32,
