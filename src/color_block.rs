@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::cmp::Ordering;
 
 use image::RgbImage;
 
@@ -37,6 +38,19 @@ fn flood_check(img: &RgbImage, x: i32, y: i32, mut blk: &mut ColorBlock) {
     flood_check(&img, x + 1, y, &mut blk);
 }
 
+fn compare_boundary_positions(p1: &Position,
+                              p2: &Position,
+                              sort_x: bool,
+                              reverse: bool)
+                              -> Ordering {
+    let order = if sort_x {
+        p1.left.cmp(&p2.left)
+    } else {
+        p1.top.cmp(&p2.top)
+    };
+    if reverse { order.reverse() } else { order }
+}
+
 #[derive(Debug)]
 pub struct ColorBlock {
     pub color: (u8, u8, u8),
@@ -61,9 +75,6 @@ impl ColorBlock {
         self.codels.len() as u32
     }
 
-    // TODO: See if there's a better way to do this than what this, which is copied from
-    // Piet_py.txt but that I don't necessarily understand what it's doing.
-    // TODO: THIS IS STILL WRONG
     pub fn boundary_codel_position(&self, dp: &Direction, cc: &Direction) -> Position {
         let initially_sort_x = match *dp {
             Direction::Up | Direction::Down => true,
@@ -84,28 +95,10 @@ impl ColorBlock {
 
         let mut cvec: Vec<&Position> = self.codels.iter().collect();
         cvec.sort_by(|p1, p2| {
-            let order = if initially_sort_x {
-                p1.left.cmp(&p2.left)
-            } else {
-                p1.top.cmp(&p2.top)
-            };
-            if reverse_first_sort {
-                order.reverse()
-            } else {
-                order
-            }
+            compare_boundary_positions(p1, p2, initially_sort_x, reverse_first_sort)
         });
         cvec.sort_by(|p1, p2| {
-            let order = if subsequently_sort_x {
-                p1.left.cmp(&p2.left)
-            } else {
-                p1.top.cmp(&p2.top)
-            };
-            if reverse_second_sort {
-                order.reverse()
-            } else {
-                order
-            }
+            compare_boundary_positions(p1, p2, subsequently_sort_x, reverse_second_sort)
         });
 
         *cvec[0]
