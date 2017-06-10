@@ -5,3 +5,4 @@ authors = ["Travis Kaufman <travis.kaufman@gmail.com>"]
 
 [dependencies]
 image = "0.13.0"
+ansi_term = "0.9.0"

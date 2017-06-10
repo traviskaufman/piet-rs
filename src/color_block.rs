@@ -71,8 +71,8 @@ impl ColorBlock {
         blk
     }
 
-    pub fn value(&self) -> u32 {
-        self.codels.len() as u32
+    pub fn value(&self) -> i32 {
+        self.codels.len() as i32
     }
 
     pub fn boundary_codel_position(&self, dp: &Direction, cc: &Direction) -> Position {
@@ -83,7 +83,7 @@ impl ColorBlock {
         let subsequently_sort_x = !initially_sort_x;
         let reverse_first_sort = match (*dp, *cc) {
             (Direction::Right, Direction::Right) => true,
-            (Direction::Down, Direction::Right) => true,
+            (Direction::Down, Direction::Left) => true,
             (Direction::Left, Direction::Left) => true,
             (Direction::Up, Direction::Right) => true,
             _ => false,

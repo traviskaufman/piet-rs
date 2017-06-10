@@ -1,3 +1,8 @@
+// TODO: Command implementation
+// TODO: s/println!/Logging
+// TODO: Refactor into interpreter iterator
+
+extern crate ansi_term;
 extern crate image;
 
 use std::env;
@@ -6,11 +11,43 @@ use std::io::prelude::*;
 
 pub mod reader;
 pub mod state;
+pub mod color;
 pub mod color_block;
 pub mod util;
 
 use color_block::ColorBlock;
+use color::{Hue, Lightness};
 use state::{State, Position, Direction};
+
+macro_rules! get {
+    ($e: expr) => (match $e { Some(e) => e, None => return ()});
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum DataType {
+    Number,
+    Char,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Command {
+    Nop,
+    Push,
+    Pop,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Mod,
+    Not,
+    Greater,
+    Pointer,
+    Switch,
+    Duplicate,
+    Roll,
+    In(DataType),
+    Out(DataType),
+}
 
 fn would_hit_restriction(img: &image::RgbImage, state: &State) -> bool {
     if state.dp() == Direction::Left && state.pos.left == 0 ||
@@ -27,14 +64,132 @@ fn would_hit_restriction(img: &image::RgbImage, state: &State) -> bool {
 
 fn exec_cmd(from_px: &(u8, u8, u8),
             to_px: &(u8, u8, u8),
-            from_pos: &Position,
-            to_pos: &Position,
-            state: &State) {
-    println!("exec_cmd: {} --> {} (DP: {:?}, CC: {:?})",
-             from_pos,
-             to_pos,
-             state.dp(),
-             state.cc());
+            from_pos: Position,
+            to_pos: Position,
+            state: &mut State,
+            from_blk: &ColorBlock) {
+    static COMMAND_MATRIX: [[Command; 3]; 6] =
+        [[Command::Nop, Command::Push, Command::Pop],
+         [Command::Add, Command::Subtract, Command::Multiply],
+         [Command::Divide, Command::Mod, Command::Not],
+         [Command::Greater, Command::Pointer, Command::Switch],
+         [Command::Duplicate, Command::Roll, Command::In(DataType::Number)],
+         [Command::In(DataType::Char),
+          Command::Out(DataType::Number),
+          Command::Out(DataType::Char)]];
+    let from_color = color::Color::from_px(from_px).unwrap();
+    let to_color = color::Color::from_px(to_px).unwrap();
+    // FIXME: Change logic wrong
+    let hue_change = match (from_color.hue, to_color.hue) {
+        (Hue::Magenta, Hue::Red) => 1,
+        (from_hue, to_hue) => {
+            let (from_i, to_i) = (from_hue as i8, to_hue as i8);
+            if to_i < from_i {
+                6 - (from_i - to_i)
+            } else {
+                to_i - from_i
+            }
+        }
+    };
+    let lightness_change = match (from_color.lightness, to_color.lightness) {
+        (Lightness::Dark, Lightness::Light) => 1,
+        (from_l, to_l) => {
+            let (from_i, to_i) = (from_l as i8, to_l as i8);
+            if to_i < from_i {
+                3 - (from_i - to_i)
+            } else {
+                to_i - from_i
+            }
+        }
+    };
+    let cmd = COMMAND_MATRIX[hue_change as usize][lightness_change as usize];
+    // println!("exec_cmd: {:?} -- {} @ {} --> {} @ {} (DP: {:?}, CC: {:?})",
+    //          cmd,
+    //          from_color,
+    //          from_pos,
+    //          to_color,
+    //          to_pos,
+    //          state.dp(),
+    //          state.cc());
+    match cmd {
+        Command::Nop => (),
+        Command::Push => {
+            state.stack.push(from_blk.value());
+        }
+        Command::Pop => {
+            state.stack.pop();
+        }
+        Command::Add => {
+            let lhs = get!(state.stack.pop());
+            let rhs = get!(state.stack.pop());
+            state.stack.push(lhs + rhs);
+        }
+        Command::Subtract => {
+            let rhs = get!(state.stack.pop());
+            let lhs = get!(state.stack.pop());
+            state.stack.push(lhs - rhs);
+        }
+        Command::Multiply => {
+            let lhs = get!(state.stack.pop());
+            let rhs = get!(state.stack.pop());
+            state.stack.push(lhs * rhs);
+        }
+        Command::Divide | Command::Mod => {
+            let divisor = get!(state.stack.pop());
+            let dividend = get!(state.stack.pop());
+            if divisor == 0 {
+                return;
+            }
+            let res = match cmd {
+                Command::Divide => dividend / divisor,
+                _ => dividend % divisor,
+            };
+            state.stack.push(res);
+        }
+        Command::Not => {
+            let top = get!(state.stack.pop());
+            state.stack.push(if top == 0 { 1 } else { 0 });
+        }
+        Command::Greater => {
+            let first = get!(state.stack.pop());
+            let second = get!(state.stack.pop());
+            state.stack.push(if second > first { 1 } else { 0 });
+        }
+        Command::Pointer => {
+            // TODO
+            unimplemented!();
+        }
+        Command::Switch => {
+            let n = get!(state.stack.pop());
+            for _ in 0..n {
+                state.toggle_cc();
+            }
+        }
+        Command::Duplicate => {
+            let last = get!(state.stack.pop());
+            state.stack.push(last);
+            state.stack.push(last);
+        }
+        Command::Roll => {
+            // TODO
+            unimplemented!();
+        }
+        Command::In(_) => {
+            // TODO
+            unimplemented!();
+        }
+        Command::Out(dtype) => {
+            let output = get!(state.stack.pop());
+            match dtype {
+                DataType::Number => write!(std::io::stdout(), "{}", output).ok(),
+                DataType::Char => {
+                    let outchar = get!(std::char::from_u32(output as u32));
+                    write!(std::io::stdout(), "{}", outchar).ok()
+                }
+            };
+        }
+    }
+    // println!("\nSTACK: {:?}", state.stack);
 }
 
 fn run_app() -> Result<(), String> {
@@ -61,7 +216,7 @@ fn run_app() -> Result<(), String> {
             let is_end_of_program = !first_restriction_check && state.dp() == orig_dp &&
                                     state.cc() == orig_cc;
             if is_end_of_program {
-                println!("END OF PROGRAM!");
+                // println!("END OF PROGRAM!");
                 return Ok(());
             }
 
@@ -76,14 +231,18 @@ fn run_app() -> Result<(), String> {
 
             state.pos = ColorBlock::from_position_in_img(&img, &state.pos)
                 .boundary_codel_position(&state.dp(), &state.cc());
-            println!("Hit restriction: new state: {:?}", state);
         }
 
         // Advance to next color block and exec color cmd
         let last_pos = state.pos;
         state.advance();
         let nextcolor = util::get_px(&img, &state.pos);
-        exec_cmd(&blk.color, &nextcolor, &last_pos, &state.pos, &state);
+        exec_cmd(&blk.color,
+                 &nextcolor,
+                 last_pos,
+                 state.pos,
+                 &mut state,
+                 &blk);
     }
 }
 
