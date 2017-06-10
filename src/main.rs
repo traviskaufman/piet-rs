@@ -4,6 +4,9 @@
 
 extern crate ansi_term;
 extern crate image;
+#[macro_use]
+extern crate log;
+extern crate env_logger;
 
 use std::env;
 use std::io;
@@ -103,14 +106,14 @@ fn exec_cmd(from_px: &(u8, u8, u8),
         }
     };
     let cmd = COMMAND_MATRIX[hue_change as usize][lightness_change as usize];
-    // println!("exec_cmd: {:?} -- {} @ {} --> {} @ {} (DP: {:?}, CC: {:?})",
-    //          cmd,
-    //          from_color,
-    //          from_pos,
-    //          to_color,
-    //          to_pos,
-    //          state.dp(),
-    //          state.cc());
+    debug!("exec_cmd: {:?} -- {} @ {} --> {} @ {} (DP: {:?}, CC: {:?})",
+           cmd,
+           from_color,
+           from_pos,
+           to_color,
+           to_pos,
+           state.dp(),
+           state.cc());
     match cmd {
         Command::Nop => (),
         Command::Push => {
@@ -189,10 +192,11 @@ fn exec_cmd(from_px: &(u8, u8, u8),
             };
         }
     }
-    // println!("\nSTACK: {:?}", state.stack);
+    trace!("STACK: {:?}", state.stack);
 }
 
 fn run_app() -> Result<(), String> {
+    try!(env_logger::init().map_err(|_| "Could not instantiate logger"));
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         return Err(String::from("Not enough arguments"));
@@ -216,7 +220,7 @@ fn run_app() -> Result<(), String> {
             let is_end_of_program = !first_restriction_check && state.dp() == orig_dp &&
                                     state.cc() == orig_cc;
             if is_end_of_program {
-                // println!("END OF PROGRAM!");
+                info!("END OF PROGRAM!");
                 return Ok(());
             }
 
