@@ -1,6 +1,7 @@
-// TODO: Command implementation
-// TODO: s/println!/Logging
+// TODO: Handle white
 // TODO: Refactor into interpreter iterator
+// TODO: Tests
+// TODO: Docs
 
 extern crate ansi_term;
 extern crate image;
