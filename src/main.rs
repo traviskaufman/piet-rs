@@ -1,4 +1,5 @@
 // TODO: Handle white
+// TODO: Finish Commands
 // TODO: Refactor into interpreter iterator
 // TODO: Tests
 // TODO: Docs
@@ -27,7 +28,7 @@ macro_rules! get {
     ($e: expr) => (match $e { Some(e) => e, None => return ()});
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataType {
     Number,
     Char,
@@ -160,8 +161,16 @@ fn exec_cmd(from_px: &(u8, u8, u8),
             state.stack.push(if second > first { 1 } else { 0 });
         }
         Command::Pointer => {
-            // TODO
-            unimplemented!();
+            const NUM_DIRECTIONS: i32 = 4;
+            let n_rotations = get!(state.stack.pop()) % NUM_DIRECTIONS;
+            let rotate_clockwise = n_rotations > 0;
+            for _ in 0..n_rotations.abs() {
+                if rotate_clockwise {
+                    state.rot_clockwise();
+                } else {
+                    state.rot_counterclockwise();
+                }
+            }
         }
         Command::Switch => {
             let n = get!(state.stack.pop());
@@ -178,9 +187,14 @@ fn exec_cmd(from_px: &(u8, u8, u8),
             // TODO
             unimplemented!();
         }
-        Command::In(_) => {
-            // TODO
-            unimplemented!();
+        Command::In(dtype) => {
+            let mut input = String::new();
+            get!(std::io::stdin().read_to_string(&mut input).ok());
+            let n: i32 = get!(input.parse().ok());
+            if dtype == DataType::Char {
+                get!(std::char::from_u32(n as u32));
+            }
+            state.stack.push(n);
         }
         Command::Out(dtype) => {
             let output = get!(state.stack.pop());
