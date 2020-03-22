@@ -108,14 +108,14 @@ fn exec_cmd(from_px: &(u8, u8, u8),
         }
     };
     let cmd = COMMAND_MATRIX[hue_change as usize][lightness_change as usize];
-    debug!("exec_cmd: {:?} -- {} @ {} --> {} @ {} (DP: {:?}, CC: {:?})",
-           cmd,
-           from_color,
-           from_pos,
-           to_color,
-           to_pos,
-           state.dp(),
-           state.cc());
+    info!("exec_cmd: {:?} -- {} @ {} --> {} @ {} (DP: {:?}, CC: {:?})",
+          cmd,
+          from_color,
+          from_pos,
+          to_color,
+          to_pos,
+          state.dp(),
+          state.cc());
     match cmd {
         Command::Nop => (),
         Command::Push => {
@@ -184,12 +184,34 @@ fn exec_cmd(from_px: &(u8, u8, u8),
             state.stack.push(last);
         }
         Command::Roll => {
-            // TODO
-            unimplemented!();
+            let mut num_rolls = get!(state.stack.pop());
+            let mut depth = get!(state.stack.pop()) - 1;
+            let len = state.stack.len() as i32;
+            trace!("ROLL: {}, {}, {}", num_rolls, depth, len);
+            trace!("ROLL STACK: {:?}", state.stack);
+            if depth < 0 {
+                return;
+            }
+            // NOTE: This may not be right, but it's how I interpret the spec
+            if depth >= len {
+                return;
+            }
+            if num_rolls < 0 {
+                num_rolls = -num_rolls;
+                depth = len - num_rolls;
+            }
+            for _ in 0..num_rolls {
+                let mut d = 0;
+                while d < depth {
+                    let offset: usize = (len - d - 1) as usize;
+                    state.stack.swap(offset, offset - 1);
+                    d += 1;
+                }
+            }
         }
         Command::In(dtype) => {
             let mut input = String::new();
-            get!(std::io::stdin().read_to_string(&mut input).ok());
+            get!(std::io::stdin().read_line(&mut input).ok());
             let n: i32 = get!(input.parse().ok());
             if dtype == DataType::Char {
                 get!(std::char::from_u32(n as u32));
@@ -223,8 +245,18 @@ fn run_app() -> Result<(), String> {
     // interpret code
     let mut state = State::new();
     loop {
+        let mut seen_white = false;
         let blk = ColorBlock::from_position_in_img(&img, &state.pos);
         state.pos = blk.boundary_codel_position(&state.dp(), &state.cc());
+
+        if blk.color == (255, 255, 255) {
+            debug!("Sliding through white color block");
+            seen_white = true;
+            while !would_hit_restriction(&img, &state) &&
+                  util::get_px(&img, &state.peek_pos()) == (0, 0, 0) {
+                state.advance();
+            }
+        }
 
         // Boundary / end of program checks
         let orig_dp = state.dp();
@@ -256,12 +288,17 @@ fn run_app() -> Result<(), String> {
         let last_pos = state.pos;
         state.advance();
         let nextcolor = util::get_px(&img, &state.pos);
-        exec_cmd(&blk.color,
-                 &nextcolor,
-                 last_pos,
-                 state.pos,
-                 &mut state,
-                 &blk);
+        seen_white = seen_white || nextcolor == (255, 255, 255);
+
+        if !seen_white {
+            debug!("Seen white: not executing command");
+            exec_cmd(&blk.color,
+                     &nextcolor,
+                     last_pos,
+                     state.pos,
+                     &mut state,
+                     &blk);
+        }
     }
 }
 
